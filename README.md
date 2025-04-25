@@ -1,10 +1,9 @@
-## docker-php-5.6
-- Add `docker-compose.yml` and `Dockerfile` to your project;
-- Run `docker-compose build && docker-compose up`;
-- Access on your preferred web browser through endpoint http://localhost:8000
+# docker-php-5.6
 
-### Instaled Extensions
-- mbstring
-- soap
-- xdebug
-- sybase
+## Download
+- `docker pull ghcr.io/clagomess/docker-php-5.6:latest`
+
+## Build
+- Run `docker-compose build release && docker-compose up web`;
+- Access on your preferred web browser through endpoint http://localhost:8000
+- OpCache Panel: `http://localhost:8000/opcache/`

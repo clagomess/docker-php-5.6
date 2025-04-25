@@ -1,4 +1,4 @@
-FROM debian:10-slim AS build-base
+FROM debian:12-slim AS build-base
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -32,7 +32,7 @@ FROM build-base AS build-php
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt install libaprutil1-dev libxml2-dev zlib1g-dev libcurl4-openssl-dev libgd-dev libpq-dev libmcrypt-dev -y
+    apt install libltdl-dev libaprutil1-dev libxml2-dev zlib1g-dev libcurl4-openssl-dev libgd-dev libpq-dev libmcrypt-dev -y
 
 COPY --from=build-httpd /httpd-result.tar.gz /httpd-result.tar.gz
 
@@ -49,8 +49,8 @@ RUN ln -s /usr/include/x86_64-linux-gnu/curl /usr/include/curl && \
     ln -s /usr/lib/x86_64-linux-gnu/libpng.so /usr/lib/
 
 # ./configure --help
-RUN cd /srv/php-5.6.9 \
-&& ./configure --with-apxs2=/usr/local/apache2/bin/apxs \
+RUN cd /srv/php-5.6.9 && \
+    ./configure --with-apxs2=/usr/local/apache2/bin/apxs \
     --with-pgsql \
     --with-pdo-pgsql \
     --with-mysql \
@@ -77,10 +77,10 @@ RUN cd /srv/php-5.6.9 \
     --with-png-dir=/usr \
     --with-jpeg-dir=/usr \
     #--with-freetype-dir=/usr \
-    --with-zlib \
-    && make -j4 \
-    && make install
+    --with-zlib
 
+RUN cd /srv/php-5.6.9 && make -j4
+RUN cd /srv/php-5.6.9 && make install
 RUN cp /srv/php-5.6.9/php.ini-development /usr/local/lib/php.ini
 
 RUN cd / && tar -czvf php-result.tar.gz \
@@ -121,7 +121,7 @@ RUN cd / && \
     /usr/local/lib/php/extensions/no-debug-zts-20131226/xdebug.so
 
 # release base
-FROM debian:10-slim AS release-base
+FROM debian:12-slim AS release-base
 
 RUN mkdir /release-root
 
@@ -138,7 +138,7 @@ ADD ./soap-includes.tar.gz /release-root/usr/local/lib/php
 COPY ./init.sh /release-root/srv/init.sh
 
 # release
-FROM debian:10-slim AS release
+FROM debian:12-slim AS release
 
 LABEL org.opencontainers.image.source=https://github.com/clagomess/docker-php-5.6
 LABEL org.opencontainers.image.description="Functional docker image for legacy PHP 5.6 + HTTPD + XDEBUG"
