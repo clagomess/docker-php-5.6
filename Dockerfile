@@ -83,6 +83,22 @@ RUN cd /srv/php-5.6.9 \
 
 RUN cp /srv/php-5.6.9/php.ini-development /usr/local/lib/php.ini
 
+RUN cd / && tar -czvf php-result.tar.gz \
+    /usr/local/lib/php \
+    /usr/local/include/php \
+    /usr/local/apache2/conf/httpd.conf  \
+    /usr/local/apache2/conf/httpd.conf.bak \
+    /usr/local/apache2/modules/libphp5.so \
+    /usr/local/bin/php-config  \
+    /usr/local/bin/phpize  \
+    /usr/local/bin/peardev \
+    /usr/local/bin/pear  \
+    /usr/local/bin/pecl  \
+    /usr/local/bin/php \
+    /usr/local/bin/phar \
+    /usr/local/etc/pear.conf \
+    /usr/local/lib/php.ini
+
 # php xdebug
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -118,6 +134,9 @@ RUN tar -xvf /php-result.tar.gz -C /release-root
 COPY --from=build-xdebug /xdebug-result.tar.gz /xdebug-result.tar.gz
 RUN tar -xvf /xdebug-result.tar.gz -C /release-root
 
+ADD ./soap-includes.tar.gz /release-root/usr/local/lib/php
+COPY ./init.sh /release-root/srv/init.sh
+
 # release
 FROM debian:10-slim AS release
 
@@ -128,7 +147,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt update \
-    && apt install locales libpq5 libgd3 libcurl4 libmcrypt4 -y
+    && apt install locales libpq5 libgd3 libcurl4 libmcrypt4 libxml2 libpcre2-8-0 libaprutil1 -y
 
 RUN locale-gen pt_BR.UTF-8 \
 && echo "locales locales/locales_to_be_generated multiselect pt_BR.UTF-8 UTF-8" | debconf-set-selections \
@@ -137,51 +156,66 @@ RUN locale-gen pt_BR.UTF-8 \
 
 COPY --from=release-base /release-root /
 
+# php config
+RUN echo '\n\
+date.timezone = America/Sao_Paulo\n\
+short_open_tag=On\n\
+display_errors = On\n\
+error_reporting = E_ALL & ~E_DEPRECATED & ~E_NOTICE\n\
+log_errors = On\n\
+error_log = /var/log/php/error.log\n\
+\n\
+# XDEBUG\n\
+zend_extension=/usr/local/lib/php/extensions/no-debug-zts-20131226/xdebug.so\n\
+xdebug.remote_enable=${XDEBUG_REMOTE_ENABLE}\n\
+xdebug.remote_handler=dbgp\n\
+xdebug.remote_mode=req\n\
+xdebug.remote_host=${XDEBUG_REMOTE_HOST}\n\
+xdebug.remote_port=${XDEBUG_REMOTE_PORT}\n\
+xdebug.remote_autostart=1\n\
+xdebug.extended_info=1\n\
+xdebug.remote_connect_back = 0\n\
+xdebug.remote_log = /var/log/php/xdebug.log\n\
+\n\
+# OPCACHE\n\
+zend_extension=/usr/local/lib/php/extensions/no-debug-zts-20131226/opcache.so\n\
+opcache.memory_consumption=128\n\
+opcache.interned_strings_buffer=8\n\
+opcache.max_accelerated_files=4000\n\
+opcache.revalidate_freq=2\n\
+opcache.fast_shutdown=1\n\
+opcache.enable_cli=1\n\
+' >> /usr/local/lib/php.ini \
+&& sed -i -- "s/magic_quotes_gpc = On/magic_quotes_gpc = Off/g" /usr/local/lib/php.ini
 
+# config httpd
+RUN echo '\n\
+ServerName localhost\n\
+AddType application/x-httpd-php .php .phtml\n\
+User www-data\n\
+Group www-data\n\
+Alias "/opcache" "/srv/opcache"\n\
+<Directory "/srv/opcache">\n\
+    Allow from all\n\
+</Directory>\n\
+' >> /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/ErrorLog logs\/error_log/ErrorLog \/var\/log\/apache\/error_log/g" /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/CustomLog logs\/access_log/CustomLog \/var\/log\/apache\/access_log/g" /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/AllowOverride None/AllowOverride All/g" /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/AllowOverride none/AllowOverride All/g" /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/DirectoryIndex index.html/DirectoryIndex index.html index.php/g" /usr/local/apache2/conf/httpd.conf
 
-#RUN apt update
-#RUN apt install build-essential -y
-#
-####
-#RUN apt install vim wget -y
-#RUN apt-get install -y apt-transport-https lsb-release ca-certificates
-#RUN wget -O /etc/apt/trusted.gpg.d/php.gpg https://packages.sury.org/php/apt.gpg
-#RUN echo "deb https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list
-#RUN apt update
-#RUN apt upgrade -y
-#RUN apt install apache2 -y
-#
-## php-pear php5.6-dev
-#RUN apt install php5.6 php5.6-mbstring php5.6-soap php-xdebug php5.6-sybase  -y
-#
-## php xdebug
-#RUN echo "xdebug.remote_enable=1" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini \
-#&& echo "xdebug.remote_handler=dbgp" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini \
-#&& echo "xdebug.remote_mode=req" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini \
-#&& echo "xdebug.remote_host=host.docker.internal" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini \
-#&& echo "xdebug.remote_port=9000" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini \
-#&& echo "xdebug.remote_autostart=1" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini \
-#&& echo "xdebug.extended_info=1" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini \
-#&& echo "xdebug.remote_connect_back = 0" >> /etc/php/5.6/apache2/conf.d/20-xdebug.ini
-#
-## config httpd
-#RUN sed -i -- "s/AllowOverride None/AllowOverride All/g" /etc/apache2/apache2.conf \
-#&& sed -i -- "s/AllowOverride none/AllowOverride All/g" /etc/apache2/apache2.conf
-#
-## config php
-#RUN echo "date.timezone = America/Sao_Paulo" > /etc/php/5.6/apache2/conf.d/sistemas.ini \
-#&& echo "short_open_tag=On" >> /etc/php/5.6/apache2/conf.d/sistemas.ini \
-#&& echo "display_errors = On" >> /etc/php/5.6/apache2/conf.d/sistemas.ini \
-#&& echo "error_reporting = E_ALL & ~E_DEPRECATED & ~E_NOTICE" >> /etc/php/5.6/apache2/conf.d/sistemas.ini
-#
-## vhost
-#RUN a2enmod actions && a2enmod alias
-#RUN echo "Alias /logs /var/www/html/.idea" > /etc/apache2/sites-available/sistemas.conf \
-#&& echo "<Directory /var/www/html/.idea>" >> /etc/apache2/sites-available/sistemas.conf \
-#&& echo "Allow from all" >> /etc/apache2/sites-available/sistemas.conf \
-#&& echo "</Directory>" >> /etc/apache2/sites-available/sistemas.conf
-#RUN a2ensite sistemas
-#
-## config log
-#RUN ln -sf /dev/stdout /var/log/apache2/access.log \
-#&& ln -sf /dev/stderr /var/log/apache2/error.log
+# create log files
+RUN mkdir /var/log/php \
+    && mkdir /var/log/apache \
+    && touch /var/log/php/error.log \
+    && touch /var/log/php/xdebug.log \
+    && touch /var/log/apache/access_log \
+    && touch /var/log/apache/error_log \
+    && chown www-data:www-data /var/log/php/error.log \
+    && chown www-data:www-data /var/log/php/xdebug.log \
+    && chown www-data:www-data /var/log/apache/access_log \
+    && chown www-data:www-data /var/log/apache/error_log
+
+# entrypoint
+CMD ["bash", "/srv/init.sh"]
