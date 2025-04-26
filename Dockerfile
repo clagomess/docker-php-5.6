@@ -23,6 +23,8 @@ RUN cd /srv/httpd-2.4.59 \
     && make -j4 \
     && make install
 
+RUN rm /usr/local/apache2/htdocs/index.html
+
 RUN cd / && tar -czvf httpd-result.tar.gz \
     /usr/local/apache2
 
@@ -143,6 +145,8 @@ FROM debian:12-slim AS release
 LABEL org.opencontainers.image.source=https://github.com/clagomess/docker-php-5.6
 LABEL org.opencontainers.image.description="Functional docker image for legacy PHP 5.6 + HTTPD + XDEBUG"
 
+WORKDIR /usr/local/apache2/htdocs
+
 ENV DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -190,6 +194,7 @@ opcache.enable_cli=1\n\
 
 # config httpd
 RUN echo '\n\
+LoadModule rewrite_module modules/mod_rewrite.so\n\
 ServerName localhost\n\
 AddType application/x-httpd-php .php .phtml\n\
 User www-data\n\
@@ -199,8 +204,9 @@ Alias "/opcache" "/srv/opcache"\n\
     Allow from all\n\
 </Directory>\n\
 ' >> /usr/local/apache2/conf/httpd.conf \
-&& sed -i -- "s/ErrorLog logs\/error_log/ErrorLog \/var\/log\/apache\/error_log/g" /usr/local/apache2/conf/httpd.conf \
-&& sed -i -- "s/CustomLog logs\/access_log/CustomLog \/var\/log\/apache\/access_log/g" /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/logs\/error_log/\/var\/log\/apache\/error_log/g" /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/logs\/access_log/\/var\/log\/apache\/access_log/g" /usr/local/apache2/conf/httpd.conf \
+&& sed -i -- "s/AllowOverride None/AllowOverride All/g" /usr/local/apache2/conf/httpd.conf \
 && sed -i -- "s/AllowOverride None/AllowOverride All/g" /usr/local/apache2/conf/httpd.conf \
 && sed -i -- "s/AllowOverride none/AllowOverride All/g" /usr/local/apache2/conf/httpd.conf \
 && sed -i -- "s/DirectoryIndex index.html/DirectoryIndex index.html index.php/g" /usr/local/apache2/conf/httpd.conf
