@@ -146,6 +146,13 @@ RUN cd / && \
     tar -czvf xdebug-result.tar.gz \
     /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
 
+# opcache status
+FROM build-base AS build-opcache-status
+
+RUN mkdir -p /srv/opcache && \
+    wget https://raw.githubusercontent.com/rlerdorf/opcache-status/refs/heads/master/opcache.php -O /srv/opcache/index.php
+
+
 # release
 FROM debian:12-slim AS release
 
@@ -164,10 +171,6 @@ RUN locale-gen pt_BR.UTF-8 \
 && rm /etc/locale.gen \
 && dpkg-reconfigure --frontend noninteractive locales
 
-#TODO: fix
-#RUN mkdir -p /opt/opcache && \
-#    wget https://raw.githubusercontent.com/rlerdorf/opcache-status/refs/heads/master/opcache.php -O /opt/opcache/index.php
-
 ADD ./soap-includes.tar.gz /opt/php-5.6.7/lib/php
 COPY ./init.sh /opt/init.sh
 COPY php.ini.d /opt/php-5.6.7/php.ini.d/
@@ -178,6 +181,7 @@ COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
 COPY --from=build-php /opt/httpd-2.4.59 /opt/httpd-2.4.59
 COPY --from=build-php /opt/php-5.6.7 /opt/php-5.6.7
 COPY --from=build-xdebug /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
+COPY --from=build-opcache-status /srv/opcache /srv/opcache
 
 RUN echo 'Include conf.d/*.conf' >> /opt/httpd-2.4.59/conf/httpd.conf
 
