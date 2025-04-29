@@ -7,7 +7,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt update && \
     apt install build-essential wget -y
 
-# httpd
+# httpd-2.4.59
 FROM build-base AS build-httpd
 
 WORKDIR /srv/httpd-2.4.59
@@ -24,7 +24,8 @@ RUN ./configure --enable-so --enable-rewrite --prefix /opt/httpd-2.4.59
 RUN make -j$(nproc)
 RUN make install
 
-RUN rm /opt/httpd-2.4.59/htdocs/index.html
+RUN echo 'Include conf.d/*.conf' >> /opt/httpd-2.4.59/conf/httpd.conf
+COPY httpd.conf.d /opt/httpd-2.4.59/conf.d/
 
 # openssl-1.0.1u
 FROM build-base AS build-openssl
@@ -41,7 +42,7 @@ RUN make depend
 RUN make -j$(nproc)
 RUN make install
 
-# curl 7.52.0
+# curl-7.52.0
 FROM build-base AS build-curl
 
 WORKDIR /srv/curl-7.52.0
@@ -63,7 +64,7 @@ RUN ./configure --prefix=/opt/curl-7.52.0 \
 RUN make -j$(nproc)
 RUN make install
 
-# php 5.6.7
+# php-5.6.7
 FROM build-base AS build-php
 
 WORKDIR /srv/php-5.6.7
@@ -121,8 +122,10 @@ RUN ./configure \
 RUN make -j$(nproc)
 RUN make install
 RUN cp /srv/php-5.6.7/php.ini-development /opt/php-5.6.7/lib/php.ini
+ADD ./soap-includes.tar.gz /opt/php-5.6.7/lib/php
+COPY php.ini.d /opt/php-5.6.7/php.ini.d/
 
-# php xdebug
+# xdebug-2.5.5
 FROM build-base AS build-xdebug
 
 WORKDIR /srv/xdebug-2.5.5
@@ -142,16 +145,11 @@ RUN ./configure --enable-xdebug --with-php-config=/opt/php-5.6.7/bin/php-config
 RUN make -j$(nproc)
 RUN make install
 
-RUN cd / && \
-    tar -czvf xdebug-result.tar.gz \
-    /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
-
-# opcache status
+# opcache-status
 FROM build-base AS build-opcache-status
 
 RUN mkdir -p /srv/opcache && \
     wget https://raw.githubusercontent.com/rlerdorf/opcache-status/refs/heads/master/opcache.php -O /srv/opcache/index.php
-
 
 # release
 FROM debian:12-slim AS release
@@ -171,19 +169,13 @@ RUN locale-gen pt_BR.UTF-8 \
 && rm /etc/locale.gen \
 && dpkg-reconfigure --frontend noninteractive locales
 
-ADD ./soap-includes.tar.gz /opt/php-5.6.7/lib/php
 COPY ./init.sh /opt/init.sh
-COPY php.ini.d /opt/php-5.6.7/php.ini.d/
-COPY httpd.conf.d /opt/httpd-2.4.59/conf.d/
-
+COPY --from=build-opcache-status /srv/opcache /srv/opcache
 COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
 COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
 COPY --from=build-php /opt/httpd-2.4.59 /opt/httpd-2.4.59
 COPY --from=build-php /opt/php-5.6.7 /opt/php-5.6.7
 COPY --from=build-xdebug /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
-COPY --from=build-opcache-status /srv/opcache /srv/opcache
-
-RUN echo 'Include conf.d/*.conf' >> /opt/httpd-2.4.59/conf/httpd.conf
 
 RUN mkdir /var/log/php \
     && mkdir /var/log/apache \
@@ -196,5 +188,4 @@ RUN mkdir /var/log/php \
     && chown www-data:www-data /var/log/apache/access_log \
     && chown www-data:www-data /var/log/apache/error_log
 
-# entrypoint
 CMD ["bash", "/opt/init.sh"]
