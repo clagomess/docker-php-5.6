@@ -85,7 +85,9 @@ COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
 COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
 
 # ./configure --help
-RUN ./configure --prefix=/opt/php-5.6.7 \
+RUN ./configure \
+    --prefix=/opt/php-5.6.7 \
+    --with-config-file-scan-dir=/opt/php-5.6.7/php.ini.d \
     --with-apxs2=/opt/httpd-2.4.59/bin/apxs \
     --with-pgsql \
     --with-pdo-pgsql \
@@ -168,43 +170,14 @@ RUN locale-gen pt_BR.UTF-8 \
 
 ADD ./soap-includes.tar.gz /opt/php-5.6.7/lib/php
 COPY ./init.sh /opt/init.sh
+COPY ./00-php.ini /opt/php-5.6.7/php.ini.d/
+COPY ./00-xdebug.ini /opt/php-5.6.7/php.ini.d/
+COPY ./00-opcache.ini /opt/php-5.6.7/php.ini.d/
 COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
 COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
 COPY --from=build-php /opt/httpd-2.4.59 /opt/httpd-2.4.59
 COPY --from=build-php /opt/php-5.6.7 /opt/php-5.6.7
 COPY --from=build-xdebug /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
-
-# php config
-RUN echo '\n\
-date.timezone = America/Sao_Paulo\n\
-short_open_tag=On\n\
-display_errors = On\n\
-error_reporting = E_ALL & ~E_DEPRECATED & ~E_NOTICE\n\
-log_errors = On\n\
-error_log = /var/log/php/error.log\n\
-\n\
-# XDEBUG\n\
-zend_extension=/opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so\n\
-xdebug.remote_enable=${XDEBUG_REMOTE_ENABLE}\n\
-xdebug.remote_handler=dbgp\n\
-xdebug.remote_mode=req\n\
-xdebug.remote_host=${XDEBUG_REMOTE_HOST}\n\
-xdebug.remote_port=${XDEBUG_REMOTE_PORT}\n\
-xdebug.remote_autostart=1\n\
-xdebug.extended_info=1\n\
-xdebug.remote_connect_back = 0\n\
-xdebug.remote_log = /var/log/php/xdebug.log\n\
-\n\
-# OPCACHE\n\
-zend_extension=/opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/opcache.so\n\
-opcache.memory_consumption=128\n\
-opcache.interned_strings_buffer=8\n\
-opcache.max_accelerated_files=4000\n\
-opcache.revalidate_freq=2\n\
-opcache.fast_shutdown=1\n\
-opcache.enable_cli=1\n\
-' >> /opt/php-5.6.7/lib/php.ini \
-&& sed -i -- "s/magic_quotes_gpc = On/magic_quotes_gpc = Off/g" /opt/php-5.6.7/lib/php.ini
 
 # config httpd
 RUN echo '\n\
