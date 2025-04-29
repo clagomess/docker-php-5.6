@@ -47,7 +47,30 @@ RUN make install
 RUN cd / && \
     tar -czvf openssl-result.tar.gz /opt/openssl-1.0.1u
 
-# php
+# curl 7.52.0
+FROM build-openssl AS build-curl
+
+RUN wget https://github.com/curl/curl/archive/refs/tags/curl-7_52_0.tar.gz -O /srv/curl.tar.gz && \
+    tar -xvf /srv/curl.tar.gz --one-top-level=curl-7.52.0 --strip-components=1 -C /srv/ && \
+    rm /srv/curl.tar.gz
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt install autoconf libtool -y
+
+WORKDIR /srv/curl-7.52.0
+
+RUN ./buildconf
+RUN ./configure --prefix=/opt/curl-7.52.0 \
+    --with-ssl=/opt/openssl-1.0.1u \
+    --disable-shared
+RUN make -j$(nproc)
+RUN make install
+
+RUN cd / && \
+    tar -czvf curl-result.tar.gz /opt/curl-7.52.0
+
+# php 5.6.7
 FROM build-base AS build-php
 
 RUN wget https://museum.php.net/php5/php-5.6.7.tar.gz -O /srv/php-5.6.7.tar.gz && \
@@ -60,10 +83,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY --from=build-httpd /httpd-result.tar.gz /httpd-result.tar.gz
 COPY --from=build-openssl /openssl-result.tar.gz /openssl-result.tar.gz
+COPY --from=build-curl /curl-result.tar.gz /curl-result.tar.gz
 
 RUN cd / && \
     tar -xvf httpd-result.tar.gz && \
-    tar -xvf openssl-result.tar.gz
+    tar -xvf openssl-result.tar.gz && \
+    tar -xvf curl-result.tar.gz
 
 RUN ln -s /usr/include/x86_64-linux-gnu/curl /usr/include/curl && \
     ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib/ && \
@@ -79,7 +104,7 @@ RUN ./configure --prefix=/opt/php-5.6.7 \
     --with-mysql \
     --with-pdo-mysql \
     --with-gd \
-    #--with-curl=/usr \
+    --with-curl=/opt/curl-7.52.0 \
     --enable-soap \
     --with-mcrypt \
     --enable-mbstring \
@@ -146,6 +171,9 @@ RUN mkdir -p /release-root/opt/opcache && \
 
 COPY --from=build-openssl /openssl-result.tar.gz /openssl-result.tar.gz
 RUN tar -xvf /openssl-result.tar.gz -C /release-root
+
+COPY --from=build-curl /curl-result.tar.gz /curl-result.tar.gz
+RUN tar -xvf /curl-result.tar.gz -C /release-root
 
 COPY --from=build-php /httpd-result.tar.gz /httpd-result.tar.gz
 RUN tar -xvf /httpd-result.tar.gz -C /release-root
