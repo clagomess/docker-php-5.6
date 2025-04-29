@@ -170,11 +170,8 @@ RUN locale-gen pt_BR.UTF-8 \
 
 ADD ./soap-includes.tar.gz /opt/php-5.6.7/lib/php
 COPY ./init.sh /opt/init.sh
-COPY ./00-php.ini /opt/php-5.6.7/php.ini.d/
-COPY ./00-xdebug.ini /opt/php-5.6.7/php.ini.d/
-COPY ./00-opcache.ini /opt/php-5.6.7/php.ini.d/
-COPY ./00-default.conf /opt/httpd-2.4.59/conf.d/
-COPY ./00-opcache.conf /opt/httpd-2.4.59/conf.d/
+COPY php.ini.d /opt/php-5.6.7/php.ini.d/
+COPY httpd.conf.d /opt/httpd-2.4.59/conf.d/
 
 COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
 COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
