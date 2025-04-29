@@ -137,9 +137,12 @@ RUN cd / && \
     /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
 
 # release base
-FROM debian:12-slim AS release-base
+FROM build-base AS release-base
 
 RUN mkdir /release-root
+
+RUN mkdir -p /release-root/opt/opcache && \
+    wget https://raw.githubusercontent.com/rlerdorf/opcache-status/refs/heads/master/opcache.php -O /release-root/opt/opcache/index.php
 
 COPY --from=build-openssl /openssl-result.tar.gz /openssl-result.tar.gz
 RUN tar -xvf /openssl-result.tar.gz -C /release-root
@@ -154,6 +157,7 @@ COPY --from=build-xdebug /xdebug-result.tar.gz /xdebug-result.tar.gz
 RUN tar -xvf /xdebug-result.tar.gz -C /release-root
 
 ADD ./soap-includes.tar.gz /release-root/opt/php-5.6.7/lib/php
+
 COPY ./init.sh /release-root/opt/init.sh
 
 # release
@@ -206,8 +210,8 @@ opcache.max_accelerated_files=4000\n\
 opcache.revalidate_freq=2\n\
 opcache.fast_shutdown=1\n\
 opcache.enable_cli=1\n\
-' >> /usr/local/lib/php.ini \
-&& sed -i -- "s/magic_quotes_gpc = On/magic_quotes_gpc = Off/g" /usr/local/lib/php.ini
+' >> /opt/php-5.6.7/lib/php.ini \
+&& sed -i -- "s/magic_quotes_gpc = On/magic_quotes_gpc = Off/g" /opt/php-5.6.7/lib/php.ini
 
 # config httpd
 RUN echo '\n\
@@ -216,8 +220,8 @@ ServerName localhost\n\
 AddType application/x-httpd-php .php .phtml\n\
 User www-data\n\
 Group www-data\n\
-Alias "/opcache" "/srv/opcache"\n\
-<Directory "/srv/opcache">\n\
+Alias "/opcache" "/opt/opcache"\n\
+<Directory "/opt/opcache">\n\
     Allow from all\n\
 </Directory>\n\
 ' >> /opt/httpd-2.4.59/conf/httpd.conf \
