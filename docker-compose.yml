@@ -5,7 +5,7 @@ services:
     ports:
       - "8000:80"
     volumes:
-      - .:/usr/local/apache2/htdocs
+      - .:/opt/httpd-2.4.59/htdocs
     environment:
       XDEBUG_REMOTE_ENABLE: 1
       XDEBUG_REMOTE_HOST: host.docker.internal
