@@ -152,7 +152,7 @@ FROM debian:12-slim AS release
 LABEL org.opencontainers.image.source=https://github.com/clagomess/docker-php-5.6
 LABEL org.opencontainers.image.description="Functional docker image for legacy PHP 5.6 + HTTPD + XDEBUG"
 
-WORKDIR /opt/httpd-2.4.59/htdocs
+WORKDIR /srv/htdocs
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -173,32 +173,17 @@ COPY ./init.sh /opt/init.sh
 COPY ./00-php.ini /opt/php-5.6.7/php.ini.d/
 COPY ./00-xdebug.ini /opt/php-5.6.7/php.ini.d/
 COPY ./00-opcache.ini /opt/php-5.6.7/php.ini.d/
+COPY ./00-default.conf /opt/httpd-2.4.59/conf.d/
+COPY ./00-opcache.conf /opt/httpd-2.4.59/conf.d/
+
 COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
 COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
 COPY --from=build-php /opt/httpd-2.4.59 /opt/httpd-2.4.59
 COPY --from=build-php /opt/php-5.6.7 /opt/php-5.6.7
 COPY --from=build-xdebug /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
 
-# config httpd
-RUN echo '\n\
-LoadModule rewrite_module modules/mod_rewrite.so\n\
-ServerName localhost\n\
-AddType application/x-httpd-php .php .phtml\n\
-User www-data\n\
-Group www-data\n\
-Alias "/opcache" "/opt/opcache"\n\
-<Directory "/opt/opcache">\n\
-    Allow from all\n\
-</Directory>\n\
-' >> /opt/httpd-2.4.59/conf/httpd.conf \
-&& sed -i -- "s/logs\/error_log/\/var\/log\/apache\/error_log/g" /opt/httpd-2.4.59/conf/httpd.conf \
-&& sed -i -- "s/logs\/access_log/\/var\/log\/apache\/access_log/g" /opt/httpd-2.4.59/conf/httpd.conf \
-&& sed -i -- "s/AllowOverride None/AllowOverride All/g" /opt/httpd-2.4.59/conf/httpd.conf \
-&& sed -i -- "s/AllowOverride None/AllowOverride All/g" /opt/httpd-2.4.59/conf/httpd.conf \
-&& sed -i -- "s/AllowOverride none/AllowOverride All/g" /opt/httpd-2.4.59/conf/httpd.conf \
-&& sed -i -- "s/DirectoryIndex index.html/DirectoryIndex index.html index.php/g" /opt/httpd-2.4.59/conf/httpd.conf
+RUN echo 'Include conf.d/*.conf' >> /opt/httpd-2.4.59/conf/httpd.conf
 
-# create log files
 RUN mkdir /var/log/php \
     && mkdir /var/log/apache \
     && touch /var/log/php/error.log \
