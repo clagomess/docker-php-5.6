@@ -10,6 +10,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # httpd
 FROM build-base AS build-httpd
 
+WORKDIR /srv/httpd-2.4.59
+
 RUN wget https://archive.apache.org/dist/httpd/httpd-2.4.59.tar.gz -O /srv/httpd-2.4.59.tar.gz && \
     tar -xvf /srv/httpd-2.4.59.tar.gz -C /srv/ && \
     rm /srv/httpd-2.4.59.tar.gz
@@ -18,25 +20,20 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt install libaprutil1-dev libpcre2-dev -y
 
-WORKDIR /srv/httpd-2.4.59 
-
 RUN ./configure --enable-so --enable-rewrite --prefix /opt/httpd-2.4.59
 RUN make -j$(nproc)
 RUN make install
 
 RUN rm /opt/httpd-2.4.59/htdocs/index.html
 
-RUN cd / && \
-    tar -czvf httpd-result.tar.gz /opt/httpd-2.4.59
-
 # openssl-1.0.1u
 FROM build-base AS build-openssl
+
+WORKDIR /srv/openssl-1.0.1u
 
 RUN wget https://github.com/openssl/openssl/releases/download/OpenSSL_1_0_1u/openssl-1.0.1u.tar.gz -O /srv/openssl.tar.gz && \
     tar -xvf /srv/openssl.tar.gz --one-top-level=openssl-1.0.1u --strip-components=1 -C /srv/ && \
     rm /srv/openssl.tar.gz
-
-WORKDIR /srv/openssl-1.0.1u
 
 RUN ./config --prefix=/opt/openssl-1.0.1u --openssldir=/opt/openssl-1.0.1u/openssl shared
 
@@ -44,11 +41,10 @@ RUN make depend
 RUN make -j$(nproc)
 RUN make install
 
-RUN cd / && \
-    tar -czvf openssl-result.tar.gz /opt/openssl-1.0.1u
-
 # curl 7.52.0
-FROM build-openssl AS build-curl
+FROM build-base AS build-curl
+
+WORKDIR /srv/curl-7.52.0
 
 RUN wget https://github.com/curl/curl/archive/refs/tags/curl-7_52_0.tar.gz -O /srv/curl.tar.gz && \
     tar -xvf /srv/curl.tar.gz --one-top-level=curl-7.52.0 --strip-components=1 -C /srv/ && \
@@ -58,7 +54,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt install autoconf libtool -y
 
-WORKDIR /srv/curl-7.52.0
+COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
 
 RUN ./buildconf
 RUN ./configure --prefix=/opt/curl-7.52.0 \
@@ -67,11 +63,10 @@ RUN ./configure --prefix=/opt/curl-7.52.0 \
 RUN make -j$(nproc)
 RUN make install
 
-RUN cd / && \
-    tar -czvf curl-result.tar.gz /opt/curl-7.52.0
-
 # php 5.6.7
 FROM build-base AS build-php
+
+WORKDIR /srv/php-5.6.7
 
 RUN wget https://museum.php.net/php5/php-5.6.7.tar.gz -O /srv/php-5.6.7.tar.gz && \
     tar -xvf /srv/php-5.6.7.tar.gz  --one-top-level=php-5.6.7 --strip-components=1 -C /srv/ && \
@@ -81,20 +76,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt install libltdl-dev libaprutil1-dev libxml2-dev zlib1g-dev libgd-dev libpq-dev libmcrypt-dev -y
 
-COPY --from=build-httpd /httpd-result.tar.gz /httpd-result.tar.gz
-COPY --from=build-openssl /openssl-result.tar.gz /openssl-result.tar.gz
-COPY --from=build-curl /curl-result.tar.gz /curl-result.tar.gz
-
-RUN cd / && \
-    tar -xvf httpd-result.tar.gz && \
-    tar -xvf openssl-result.tar.gz && \
-    tar -xvf curl-result.tar.gz
-
 RUN ln -s /usr/include/x86_64-linux-gnu/curl /usr/include/curl && \
     ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib/ && \
     ln -s /usr/lib/x86_64-linux-gnu/libpng.so /usr/lib/
 
-WORKDIR /srv/php-5.6.7
+COPY --from=build-httpd /opt/httpd-2.4.59 /opt/httpd-2.4.59
+COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
+COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
 
 # ./configure --help
 RUN ./configure --prefix=/opt/php-5.6.7 \
@@ -132,25 +120,20 @@ RUN make -j$(nproc)
 RUN make install
 RUN cp /srv/php-5.6.7/php.ini-development /opt/php-5.6.7/lib/php.ini
 
-RUN cd / && \
-    tar -czvf php-result.tar.gz /opt/php-5.6.7
-
-RUN cd / && \
-    tar -czvf httpd-result.tar.gz /opt/httpd-2.4.59
-
 # php xdebug
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt update && \
-    apt install autoconf -y
+FROM build-base AS build-xdebug
 
-FROM build-php AS build-xdebug
+WORKDIR /srv/xdebug-2.5.5
 
 RUN wget https://github.com/xdebug/xdebug/archive/refs/tags/XDEBUG_2_5_5.tar.gz -O /srv/xdebug-2.5.5.tar.gz && \
     tar -xvf /srv/xdebug-2.5.5.tar.gz --one-top-level=xdebug-2.5.5 --strip-components=1 -C /srv/ && \
     rm /srv/xdebug-2.5.5.tar.gz
 
-WORKDIR /srv/xdebug-2.5.5
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt install autoconf libtool -y
+
+COPY --from=build-php /opt/php-5.6.7 /opt/php-5.6.7
 
 RUN /opt/php-5.6.7/bin/phpize 
 RUN ./configure --enable-xdebug --with-php-config=/opt/php-5.6.7/bin/php-config
@@ -161,33 +144,6 @@ RUN cd / && \
     tar -czvf xdebug-result.tar.gz \
     /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
 
-# release base
-FROM build-base AS release-base
-
-RUN mkdir /release-root
-
-RUN mkdir -p /release-root/opt/opcache && \
-    wget https://raw.githubusercontent.com/rlerdorf/opcache-status/refs/heads/master/opcache.php -O /release-root/opt/opcache/index.php
-
-COPY --from=build-openssl /openssl-result.tar.gz /openssl-result.tar.gz
-RUN tar -xvf /openssl-result.tar.gz -C /release-root
-
-COPY --from=build-curl /curl-result.tar.gz /curl-result.tar.gz
-RUN tar -xvf /curl-result.tar.gz -C /release-root
-
-COPY --from=build-php /httpd-result.tar.gz /httpd-result.tar.gz
-RUN tar -xvf /httpd-result.tar.gz -C /release-root
-
-COPY --from=build-php /php-result.tar.gz /php-result.tar.gz
-RUN tar -xvf /php-result.tar.gz -C /release-root
-
-COPY --from=build-xdebug /xdebug-result.tar.gz /xdebug-result.tar.gz
-RUN tar -xvf /xdebug-result.tar.gz -C /release-root
-
-ADD ./soap-includes.tar.gz /release-root/opt/php-5.6.7/lib/php
-
-COPY ./init.sh /release-root/opt/init.sh
-
 # release
 FROM debian:12-slim AS release
 
@@ -196,7 +152,6 @@ LABEL org.opencontainers.image.description="Functional docker image for legacy P
 
 WORKDIR /opt/httpd-2.4.59/htdocs
 
-ENV DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt update && \
@@ -207,7 +162,17 @@ RUN locale-gen pt_BR.UTF-8 \
 && rm /etc/locale.gen \
 && dpkg-reconfigure --frontend noninteractive locales
 
-COPY --from=release-base /release-root /
+#TODO: fix
+#RUN mkdir -p /opt/opcache && \
+#    wget https://raw.githubusercontent.com/rlerdorf/opcache-status/refs/heads/master/opcache.php -O /opt/opcache/index.php
+
+ADD ./soap-includes.tar.gz /opt/php-5.6.7/lib/php
+COPY ./init.sh /opt/init.sh
+COPY --from=build-openssl /opt/openssl-1.0.1u /opt/openssl-1.0.1u
+COPY --from=build-curl /opt/curl-7.52.0 /opt/curl-7.52.0
+COPY --from=build-php /opt/httpd-2.4.59 /opt/httpd-2.4.59
+COPY --from=build-php /opt/php-5.6.7 /opt/php-5.6.7
+COPY --from=build-xdebug /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so /opt/php-5.6.7/lib/php/extensions/no-debug-zts-20131226/xdebug.so
 
 # php config
 RUN echo '\n\
